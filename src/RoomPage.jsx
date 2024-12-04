@@ -24,11 +24,11 @@ const RoomPage = () => {
     socket.onopen = () => {
       console.log(`Connected to room: ${roomId}`);
       // Optionally add a ping mechanism to keep connection alive
-      const pingInterval = setInterval(() => {
-        if (socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ type: 'ping' }));
-        }
-      }, 30000); // Send ping every 30 seconds
+      // const pingInterval = setInterval(() => {
+      //   if (socket.readyState === WebSocket.OPEN) {
+      //     socket.send(JSON.stringify({ type: 'ping' }));
+      //   }
+      // }, 30000); // Send ping every 30 seconds
 
       // Clean up ping interval when socket closes
       socket.addEventListener('close', () => clearInterval(pingInterval));
