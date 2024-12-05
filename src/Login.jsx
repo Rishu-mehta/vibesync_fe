@@ -22,6 +22,7 @@ const Login = () => {
       // Save both tokens to localStorage and set them as cookies if needed
       localStorage.setItem('access_token', access);
       localStorage.setItem('refresh_token', refresh);
+      localStorage.setItem('username', username);
   
       // Optionally, save as cookies if needed (for persistent authentication)
       document.cookie = `access_token=${access}; path=/`;

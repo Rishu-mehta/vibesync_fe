@@ -1,52 +1,62 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, TextField, Button, List, ListItem, ListItemText } from '@mui/material';
+import { Box, Typography, TextField, Button, List, ListItem, ListItemText, IconButton, Drawer } from '@mui/material';
 import { useParams } from 'react-router-dom';
+import ChatIcon from '@mui/icons-material/Chat';
 
 const RoomPage = () => {
-  const { roomId } = useParams(); // Room ID from URL
+  const { roomId } = useParams();
   const [ws, setWs] = useState(null);
   const [message, setMessage] = useState('');
   const [chatMessages, setChatMessages] = useState([]);
-  const token = localStorage.getItem('access_token'); // Authentication token
+  const [isChatOpen, setIsChatOpen] = useState(false); // State to toggle chat box
+  const token = localStorage.getItem('access_token');
 
   useEffect(() => {
     if (!roomId || !token) return;
 
-    let isSubscribed = true; // Add cleanup flag
+    let isSubscribed = true;
     const socket = new WebSocket(`ws://127.0.0.1:8000/ws/room/${roomId}/?token=${token}`);
 
-    // Only set the WebSocket if the component is still mounted
     if (isSubscribed) {
       setWs(socket);
     }
 
-    // Handle WebSocket events
     socket.onopen = () => {
       console.log(`Connected to room: ${roomId}`);
-      // Optionally add a ping mechanism to keep connection alive
-      // const pingInterval = setInterval(() => {
-      //   if (socket.readyState === WebSocket.OPEN) {
-      //     socket.send(JSON.stringify({ type: 'ping' }));
-      //   }
-      // }, 30000); // Send ping every 30 seconds
-
-      // Clean up ping interval when socket closes
-      socket.addEventListener('close', () => clearInterval(pingInterval));
     };
 
     socket.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      console.log('Message from server:', data);
-      if (data.type === 'chat_message') {
-        setChatMessages((prev) => [...prev, { username: data.username, message: data.message }]);
+      
+      if (data.type === 'chat') {
+        try {
+          const messageData = JSON.parse(data.message);
+          
+          // Only add received messages, ignore own messages
+          if (data.username !== localStorage.getItem('username')) {
+            setChatMessages((prev) => {
+              const isDuplicate = prev.some(
+                msg => msg.username === data.username && 
+                      msg.message === messageData.message
+              );
+              if (isDuplicate) return prev;
+              
+              return [...prev, {
+                username: data.username,
+                message: messageData.message.replace(/[{"}]/g, '').split(':')[1], // Extract just the message content
+                timestamp: Date.now()
+              }];
+            });
+          }
+        } catch (error) {
+          console.error('Error parsing message:', error);
+        }
       }
     };
-
     socket.onclose = (event) => {
       console.log('WebSocket closed:', event);
       if (isSubscribed) {
         setWs(null);
-        // Optionally implement reconnection logic here
       }
     };
 
@@ -54,7 +64,6 @@ const RoomPage = () => {
       console.error('WebSocket error:', error);
     };
 
-    // Cleanup on component unmount
     return () => {
       isSubscribed = false;
       if (socket.readyState === WebSocket.OPEN) {
@@ -65,38 +74,185 @@ const RoomPage = () => {
 
   const handleSendMessage = () => {
     if (ws && ws.readyState === WebSocket.OPEN && message.trim()) {
-      ws.send(JSON.stringify({ type: 'chat_message', message }));
+      const messageData = {
+        type: 'chat',
+        message: JSON.stringify({
+          message: message
+        }),
+        username: localStorage.getItem('username')
+      };
+      
+      ws.send(JSON.stringify(messageData));
+      
+      // Add sent message to chat
+      setChatMessages((prev) => {
+        const newMessage = {
+          username: localStorage.getItem('username'),
+          message: message, // Just the plain message
+          timestamp: Date.now()
+        };
+        
+        const isDuplicate = prev.some(
+          msg => msg.username === newMessage.username && 
+                msg.message === newMessage.message
+        );
+        
+        if (isDuplicate) return prev;
+        return [...prev, newMessage];
+      });
+      
       setMessage('');
     }
+  };
+  const toggleChat = () => {
+    setIsChatOpen(!isChatOpen);
   };
 
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4">Room: {roomId}</Typography>
-
-      <Box sx={{ mt: 2 }}>
-        <Typography variant="h6">Messages</Typography>
-        <List>
-          {chatMessages.map((msg, idx) => (
-            <ListItem key={idx}>
-              <ListItemText primary={`${msg.username}: ${msg.message}`} />
-            </ListItem>
-          ))}
-        </List>
-      </Box>
-
-      <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-        <TextField
-          label="Message"
-          variant="outlined"
-          fullWidth
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-        />
-        <Button variant="contained" color="primary" onClick={handleSendMessage}>
-          Send
-        </Button>
-      </Box>
+      <IconButton 
+        onClick={toggleChat} 
+        sx={{ 
+          position: 'fixed', 
+          right: 16, 
+          bottom: 16,
+          backgroundColor: 'primary.main',
+          color: 'white',
+          '&:hover': {
+            backgroundColor: 'primary.dark',
+          },
+          zIndex: 1000
+        }}
+      >
+        <ChatIcon />
+      </IconButton>
+  
+      <Drawer 
+        anchor="right" 
+        open={isChatOpen} 
+        onClose={toggleChat}
+        sx={{
+          '& .MuiDrawer-paper': {
+            width: {
+              xs: '100%',
+              sm: 350
+            }
+          }
+        }}
+      >
+        <Box sx={{ 
+          height: '100%', 
+          display: 'flex', 
+          flexDirection: 'column'
+        }}>
+          <Box sx={{ 
+            p: 2, 
+            borderBottom: 1, 
+            borderColor: 'divider'
+          }}>
+            <Typography variant="h6">Chat Room</Typography>
+          </Box>
+  
+          <Box sx={{ 
+            flexGrow: 1, 
+            overflow: 'auto', 
+            p: 2,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1
+          }}>
+            {chatMessages.map((msg, idx) => (
+              <Box
+                key={idx}
+                sx={{
+                  backgroundColor: msg.username === localStorage.getItem('username') 
+                    ? 'primary.main' 
+                    : 'grey.100',
+                  color: msg.username === localStorage.getItem('username') 
+                    ? 'white' 
+                    : 'text.primary',
+                  p: 1.5,
+                  borderRadius: 2,
+                  maxWidth: '75%',
+                  alignSelf: msg.username === localStorage.getItem('username') 
+                    ? 'flex-end' 
+                    : 'flex-start',
+                  position: 'relative',
+                  wordBreak: 'break-word', // Add word breaking
+                  overflowWrap: 'break-word', // Ensure long words wrap
+                  whiteSpace: 'pre-wrap' // Preserve line breaks and wrap text
+                }}
+              >
+                <Typography 
+                  variant="subtitle2" 
+                  sx={{ 
+                    color: msg.username === localStorage.getItem('username') 
+                      ? 'white' 
+                      : 'primary.main',
+                    fontSize: '0.75rem',
+                    mb: 0.5
+                  }}
+                >
+                  {msg.username}
+                </Typography>
+                <Typography 
+                  variant="body2"
+                  sx={{
+                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word'
+                  }}
+                >
+                  {msg.message}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+  
+          <Box sx={{ 
+            p: 2, 
+            borderTop: 1, 
+            borderColor: 'divider',
+            backgroundColor: 'background.paper'
+          }}>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                label="Message"
+                variant="outlined"
+                size="small"
+                fullWidth
+                multiline
+                maxRows={4}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                sx={{
+                  '& .MuiInputBase-root': {
+                    maxHeight: '100px',
+                    overflow: 'auto'
+                  }
+                }}
+              />
+              <Button 
+                variant="contained" 
+                color="primary" 
+                onClick={handleSendMessage}
+                sx={{
+                  minWidth: '64px',
+                  height: 'fit-content'
+                }}
+              >
+                Send
+              </Button>
+            </Box>
+          </Box>
+        </Box>
+      </Drawer>
     </Box>
   );
 };
