@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, Typography, TextField, Button, List, ListItem, ListItemText, IconButton, Drawer } from '@mui/material';
 import { useParams } from 'react-router-dom';
 import ChatIcon from '@mui/icons-material/Chat';
+import VideoPlayer from './components/VideoPlayer';
 
 const RoomPage = () => {
   const { roomId } = useParams();
@@ -29,28 +30,21 @@ const RoomPage = () => {
       const data = JSON.parse(event.data);
       
       if (data.type === 'chat') {
-        try {
-          const messageData = JSON.parse(data.message);
+        setChatMessages((prev) => {
+          const newMessage = {
+            username: data.username,
+            message: data.message, // Direct access to message
+            timestamp: Date.now()
+          };
           
-          // Only add received messages, ignore own messages
-          if (data.username !== localStorage.getItem('username')) {
-            setChatMessages((prev) => {
-              const isDuplicate = prev.some(
-                msg => msg.username === data.username && 
-                      msg.message === messageData.message
-              );
-              if (isDuplicate) return prev;
-              
-              return [...prev, {
-                username: data.username,
-                message: messageData.message.replace(/[{"}]/g, '').split(':')[1], // Extract just the message content
-                timestamp: Date.now()
-              }];
-            });
-          }
-        } catch (error) {
-          console.error('Error parsing message:', error);
-        }
+          const isDuplicate = prev.some(
+            msg => msg.username === newMessage.username && 
+                  msg.message === newMessage.message
+          );
+          
+          if (isDuplicate) return prev;
+          return [...prev, newMessage];
+        });
       }
     };
     socket.onclose = (event) => {
@@ -76,31 +70,11 @@ const RoomPage = () => {
     if (ws && ws.readyState === WebSocket.OPEN && message.trim()) {
       const messageData = {
         type: 'chat',
-        message: JSON.stringify({
-          message: message
-        }),
+        message: message, // Send message directly
         username: localStorage.getItem('username')
       };
       
       ws.send(JSON.stringify(messageData));
-      
-      // Add sent message to chat
-      setChatMessages((prev) => {
-        const newMessage = {
-          username: localStorage.getItem('username'),
-          message: message, // Just the plain message
-          timestamp: Date.now()
-        };
-        
-        const isDuplicate = prev.some(
-          msg => msg.username === newMessage.username && 
-                msg.message === newMessage.message
-        );
-        
-        if (isDuplicate) return prev;
-        return [...prev, newMessage];
-      });
-      
       setMessage('');
     }
   };
@@ -111,6 +85,9 @@ const RoomPage = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4">Room: {roomId}</Typography>
+      <Box sx={{ mb: 3 }}>
+        <VideoPlayer ws={ws} />
+      </Box>
       <IconButton 
         onClick={toggleChat} 
         sx={{ 
