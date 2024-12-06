@@ -3,6 +3,7 @@ import { Box, Typography, TextField, Button, List, ListItem, ListItemText, IconB
 import { useParams } from 'react-router-dom';
 import ChatIcon from '@mui/icons-material/Chat';
 import VideoPlayer from './components/VideoPlayer';
+import VideoCall from './components/VideoCall';
 
 const RoomPage = () => {
   const { roomId } = useParams();
@@ -11,6 +12,7 @@ const RoomPage = () => {
   const [chatMessages, setChatMessages] = useState([]);
   const [isChatOpen, setIsChatOpen] = useState(false); // State to toggle chat box
   const token = localStorage.getItem('access_token');
+  const [connectedUsers, setConnectedUsers] = useState([]);
 
   useEffect(() => {
     if (!roomId || !token) return;
@@ -28,7 +30,9 @@ const RoomPage = () => {
 
     socket.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      
+      if (data.type === 'user_list_update') {
+        setConnectedUsers(data.users);
+      }
       if (data.type === 'chat') {
         setChatMessages((prev) => {
           const newMessage = {
@@ -87,6 +91,11 @@ const RoomPage = () => {
       <Typography variant="h4">Room: {roomId}</Typography>
       <Box sx={{ mb: 3 }}>
         <VideoPlayer ws={ws} />
+        
+      </Box>
+      <Box sx={{ mb: 3 }}>
+        
+        <VideoCall ws={ws} connectedUsers={connectedUsers} />
       </Box>
       <IconButton 
         onClick={toggleChat} 
